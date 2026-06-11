@@ -106,11 +106,27 @@
         window.addEventListener('mouseup', () => { 
             if (mouse.isDown) {
                 mouse.isDown = false;
-                projectToBesselModes(); // Магия! Переводим геометрию мышки в гармоники Бесселя
+                projectToBesselModes();
             }
         });
         window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+        window.addEventListener('touchstart', (e) => {
+            mouse.isDown = true;
+            mouse.x = e.touches[0].clientX;
+            mouse.y = e.touches[0].clientY;
+        });
 
+        window.addEventListener('touchmove', (e) => {
+            if (mouse.isDown) {
+                mouse.x = e.touches[0].clientX;
+                mouse.y = e.touches[0].clientY;
+            }
+        });
+
+        window.addEventListener('touchend', () => {
+            mouse.isDown = false;
+            projectToBesselModes();
+        });
         function updateMouse(e) {
             mouse.x = e.clientX;
             mouse.y = e.clientY;
