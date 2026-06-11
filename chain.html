@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Интерактивная цепь Бернулли (Захват мышкой)</title>
+    <style>
+        body { margin: 0; background: #0b0c10; color: white; font-family: sans-serif; overflow: hidden; }
+        .info { position: absolute; top: 10px; left: 10px; pointer-events: none; max-width: 550px; line-height: 1.4; }
+        h1 { margin: 0 0 5px 0; font-size: 18px; color: #4caf50; }
+        .math { font-family: 'Courier New', monospace; background: #1f2833; padding: 2px 6px; border-radius: 4px; color: #ffeb3b; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>Математический захват формы цепи</h1>
+        <p>Уравнение Бернулли: свободные колебания после деформации.</p>
+        <p>👉 <b>Зажмите левую кнопку мыши</b> и потяните цепь в сторону, чтобы зафиксировать её.</p>
+        <p>Когда вы <b>отпустите мышку</b>, цепь начнет колебаться строго из этого положения!</p>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const centerX = canvas.width / 2;
+        const startY = 60;
+        const chainLength = canvas.height - 150;
+        const pointsCount = 100;
+
+        let mouse = { x: 0, y: 0, isDown: false };
+        let time = 0;
+
+        // Корни функции Бесселя J0
+        const roots = [2.4048, 5.5201, 8.6537, 11.7915, 14.9309];
+        const numModes = roots.length;
+        
+        // Коэффициенты амплитуд и фаз для свободных колебаний
+        let A = new Array(numModes).fill(0);
+        let alpha = new Array(numModes).fill(0);
+
+        // Массив для хранения геометрии цепи при ручном удержании
+        let staticOffsets = new Array(pointsCount + 1).fill(0);
+
+        // Начальное красивое состояние (просто первая мода)
+        A[0] = 60;
+
+        // Скоростная аппроксимация функции Бесселя J0(x)
+        function J0(x) {
+            let ax = Math.abs(x);
+            if (ax < 8.0) {
+                let y = x * x;
+                let ans1 = 57568490574.0 + y * (-13362590354.0 + y * (651619640.7 + y * (-11214424.18 + y * (77392.33017 + y * (-184.9052456)))));
+                let ans2 = 57568490411.0 + y * (1029532985.0 + y * (9494680.718 + y * (59279.82131 + y * (267.8532712 + y * 1.0))));
+                return ans1 / ans2;
+            } else {
+                let z = 8.0 / ax;
+                let y = z * z;
+                let xx = ax - 0.785398164;
+                let ans1 = 1.0 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+                let ans2 = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7582452845e-6 + y * (-0.917410014e-7))));
+                return Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * ans1 - z * Math.sin(xx) * ans2);
+            }
+        }
+
+        // Функция численного разложения Фурье-Бесселя (нахождение коэффициентов из формы цепи)
+        function projectToBesselModes() {
+            // Сбрасываем фазы времени для нового отсчета свободного полета
+            time = 0; 
+            
+            for (let m = 0; m < numModes; m++) {
+                let mu = roots[m];
+                let integralNumerator = 0;
+                let integralDenominator = 0;
+                let steps = 200;
+                let dx = 1.0 / steps;
+
+                // Интегрируем по ортогональному базису Бесселя
+                for (let s = 0; s <= steps; s++) {
+                    let besselX = s * dx; // переменная x от 0 до 1 (от кончика до верха)
+                    
+                    // Находим соответствующее ручное смещение в этой точке
+                    let normY = 1 - besselX;
+                    let pIndex = Math.floor(normY * pointsCount);
+                    pIndex = Math.max(0, Math.min(pointsCount, pIndex));
+                    let fx = staticOffsets[pIndex];
+
+                    let j0_val = J0(mu * Math.sqrt(besselX));
+
+                    // Весовой интеграл теории Бесселя
+                    integralNumerator += fx * j0_val * dx;
+                    integralDenominator += j0_val * j0_val * dx;
+                }
+
+                // Вычисляем точную амплитуду для этой гармоники
+                A[m] = integralNumerator / integralDenominator;
+                alpha[m] = 0; // Начинаем движение с нулевой начальной скоростью (из покоя)
+            }
+        }
+
+        // Слушатели управления
+        window.addEventListener('mousedown', (e) => { mouse.isDown = true; updateMouse(e); });
+        window.addEventListener('mousemove', (e) => { updateMouse(e); });
+        window.addEventListener('mouseup', () => { 
+            if (mouse.isDown) {
+                mouse.isDown = false;
+                projectToBesselModes(); // Магия! Переводим геометрию мышки в гармоники Бесселя
+            }
+        });
+        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+
+        function updateMouse(e) {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        }
+
+        function calculateStaticShape() {
+            // Вычисляем геометрию ломаной линии цепи, когда её тянут пальцем
+            let mouseNormY = (mouse.y - startY) / chainLength;
+            mouseNormY = Math.max(0, Math.min(1, mouseNormY));
+            let mouseOffset = mouse.x - centerX;
+
+            for (let i = 0; i <= pointsCount; i++) {
+                let normY = i / pointsCount;
+                if (normY <= mouseNormY) {
+                    // Линия от точки крепления (0,0) до пальца мышки
+                    staticOffsets[i] = mouseNormY > 0 ? (normY / mouseNormY) * mouseOffset : 0;
+                } else {
+                    // От пальца мышки до нижнего свободного конца (висит вертикально вниз под пальцем)
+                    staticOffsets[i] = mouseOffset;
+                }
+            }
+        }
+
+        function updatePhysics() {
+            if (mouse.isDown) {
+                calculateStaticShape();
+            } else {
+                time += 0.05; // Свободный ход времени для тригонометрических функций мод
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Ось баланса
+            ctx.beginPath();
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, canvas.height);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.stroke();
+
+            // Отрисовка геометрии
+            ctx.beginPath();
+            
+            // Коэффициент общего затухания в воздухе
+            let airDamping = Math.exp(-time * 0.03); 
+
+            for (let i = 0; i <= pointsCount; i++) {
+                let normY = i / pointsCount;
+                let posY = startY + normY * chainLength;
+                let totalOffset = 0;
+
+                if (mouse.isDown) {
+                    // Пока мышка зажата — показываем фиксированное удержание
+                    totalOffset = staticOffsets[i];
+                } else {
+                    // Когда отпущена — вычисляем сумму затухающих бесселевых траекторий
+                    let besselX = 1 - normY;
+                    for (let m = 0; m < numModes; m++) {
+                        let frequency = roots[m] * 0.4;
+                        
+                        // Высшие гармоники затухают быстрее из-за внутреннего трения звеньев
+                        let internalFriction = Math.exp(-time * roots[m] * 0.02); 
+                        
+                        totalOffset += A[m] * J0(roots[m] * Math.sqrt(besselX)) * Math.cos(time * frequency) * airDamping * internalFriction;
+                    }
+                }
+
+                if (i === 0) ctx.moveTo(centerX + totalOffset, posY);
+                else ctx.lineTo(centerX + totalOffset, posY);
+            }
+
+            ctx.strokeStyle = mouse.isDown ? '#ffeb3b' : '#4caf50';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Точка крепления цепи
+            ctx.beginPath();
+            ctx.arc(centerX, startY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff4757';
+            ctx.fill();
+        }
+
+        function loop() {
+            updatePhysics();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
