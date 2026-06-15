@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Барабан Бесселя</title>
+<style>
+  body {
+    margin: 0;
+    background: #ffffff;
+    color: black;
+    font-family: sans-serif;
+    overflow: hidden;
+  }
+  .info {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    pointer-events: none;
+    max-width: 420px;
+    line-height: 1.5;
+  }
+  h1 { margin: 0 0 5px 0; font-size: 18px; color: #4caf50; }
+  p { margin: 3px 0; font-size: 13px; }
+  #mode-label {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 13px;
+    color: #888;
+    pointer-events: none;
+    text-align: right;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<div class="info">
+  <h1>барабан бернулли — бессель в действии</h1>
+  <p><b>тыкни по мембране</b> — она зазвенит</p>
+  <p><b>кликни ближе к краю</b> — поставить узловую точку (красная). до 6 штук.</p>
+  <p>точки зажима меняют форму колебания и звук: каждая новая точка повышает угловой порядок функции Бесселя</p>
+</div>
+
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  layout();
+});
+
+// ─── Layout: два вида
+let topCX, topCY, topR;    // вид сверху
+let sideSX, sideSY, sideW, sideH; // вид сбоку
+
+function layout() {
+  const W = canvas.width, H = canvas.height;
+  topR = Math.min(W * 0.22, H * 0.36, 160);
+  topCX = W * 0.3;
+  topCY = H * 0.46;
+  sideW = Math.min(W * 0.42, 400);
+  sideH = topR * 0.9;
+  sideSX = W * 0.54;
+  sideSY = topCY - sideH / 2;
+}
+layout();
+
+// ─── Нули функций Бесселя J_m, первые 10 нулей для m=0..6
+const zeros = [
+  [2.4048,5.5201,8.6537,11.7915,14.9309,18.0711,21.2116,24.3525,27.4935,30.6346],
+  [3.8317,7.0156,10.1735,13.3237,16.4706,19.6160,22.7601,25.9037,29.0468,32.1897],
+  [5.1356,8.4172,11.6198,14.7960,17.9598,21.1170,24.2701,27.4206,30.5692,33.7165],
+  [6.3802,9.7610,13.0152,16.2235,19.4094,22.5827,25.7482,28.9083,32.0649,35.2187],
+  [7.5883,11.0647,14.3725,17.6160,20.8269,24.0190,27.1991,30.3710,33.5371,36.6990],
+  [8.7715,12.3386,15.7002,18.9801,22.2178,25.4303,28.6266,31.8117,34.9888,38.1599],
+  [9.9361,13.5893,17.0038,20.3208,23.5861,26.8202,30.0337,33.2330,36.4220,39.6032],
+];
+
+// Аппроксимации J0 и J1
+function J0(x) {
+  let ax = Math.abs(x);
+  if (ax < 8) {
+    let y = x*x;
+    return (57568490574+y*(-13362590354+y*(651619640.7+y*(-11214424.18+y*(77392.33017+y*(-184.9052456))))))
+         / (57568490411+y*(1029532985+y*(9494680.718+y*(59279.82131+y*(267.8532712+y)))));
+  }
+  let z=8/ax,y=z*z,xx=ax-0.785398164;
+  return Math.sqrt(0.636619772/ax)*(Math.cos(xx)*(1+y*(-1.098628627e-3+y*(2.734510407e-5+y*(-2.073370639e-6+y*2.093887211e-7))))-z*Math.sin(xx)*(-1.562499995e-2+y*(1.430488765e-4+y*(-6.911147651e-6+y*(7.582452845e-7+y*(-9.17410014e-8))))));
+}
+function J1(x) {
+  let ax = Math.abs(x);
+  if (ax < 8) {
+    let y=x*x;
+    let a=x*(72362614232+y*(-7895059235+y*(242396853.1+y*(-2972611.439+y*(15704.4826+y*(-30.16116360))))));
+    let b=144725228442+y*(2300535178+y*(18583304.74+y*(99447.43394+y*(376.9991397+y))));
+    return a/b;
+  }
+  let z=8/ax,y=z*z,xx=ax-2.356194491;
+  let ans=Math.sqrt(0.636619772/ax)*(Math.cos(xx)*(1+y*(1.83105e-3+y*(-3.516396496e-5+y*(2.457520174e-6+y*(-2.40337019e-7)))))-z*Math.sin(xx)*(4.687499995e-2+y*(-2.002690873e-4+y*(8.449199096e-6+y*(-8.8228987e-7+y*1.05787412e-7)))));
+  return x<0?-ans:ans;
+}
+// Рекуррентность: J_{m+1}(x) = (2m/x)*J_m(x) - J_{m-1}(x)
+function Jm(m, x) {
+  if (x === 0) return m === 0 ? 1 : 0;
+  if (m === 0) return J0(x);
+  if (m === 1) return J1(x);
+  let prev2 = J0(x), prev1 = J1(x);
+  for (let k = 1; k < m; k++) {
+    let cur = (2*k/x)*prev1 - prev2;
+    prev2 = prev1; prev1 = cur;
+  }
+  return prev1;
+}
+
+// ─── Физика
+// Угловой порядок m = количество зажатых точек (они создают узловые диаметры)
+// Суперпозиция нескольких нулей (n=1,2,3) с затуханием
+const N_RADIAL = 10; // радиальных мод в суперпозиции
+
+let pinned = []; // зажатые точки: [{angle}]
+let modes  = []; // активные моды: [{mu, amp, phase, omega}]
+let globalPhase = 0;
+let animId = null;
+let decayStart = null;
+let lastTS = null;
+let audioCtx = null;
+let activeNodes = [];
+
+function killSound() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  for (let {osc, gain} of activeNodes) {
+    try { gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(0, now); osc.stop(now); } catch(e) {}
+  }
+  activeNodes = [];
+}
+
+function angularOrder() {
+  // Каждая зажатая точка добавляет узловой диаметр → m растёт
+  // Но учитываем симметрию: m = количество точек / 2 округлённо, минимум 0
+  return Math.min(pinned.length, 6);
+}
+
+function startVibration(hitX, hitY) {
+  killSound();
+  const m = angularOrder();
+  const mu0 = zeros[m][0];
+  modes = [];
+  // Амплитуды первых N_RADIAL нулей: 1, 1/2, 1/4
+  for (let n = 0; n < N_RADIAL; n++) {
+    let mu = zeros[m][n];
+    modes.push({
+      mu,
+      amp: 1 / Math.pow(2, n),
+      phase: 0,
+      omega: mu / mu0,   // нормированная частота (относительно первого нуля)
+      m,
+    });
+  }
+  globalPhase = 0;
+  decayStart = null;
+  lastTS = null;
+  if (animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(step);
+  playDrum(m, hitX, hitY);
+}
+
+// ─── Значение волны в точке мембраны (r∈[0,1], theta) при текущем времени
+function waveAt(r, theta, t) {
+  if (modes.length === 0) return 0;
+  let decay = Math.exp(-(t || 0) * 1.1);
+  let val = 0;
+  for (let md of modes) {
+    let radial = Jm(md.m, md.mu * r);
+    let angular = md.m === 0 ? 1 : Math.cos(md.m * theta);
+    let internalDecay = Math.exp(-(t||0) * md.mu * 0.18);
+    val += md.amp * radial * angular * Math.cos(md.omega * globalPhase) * decay * internalDecay;
+  }
+  return val;
+}
+
+// ─── Анимация
+let currentT = 0;
+
+function step(ts) {
+  if (!lastTS) { lastTS = ts; decayStart = ts; }
+  let dt = (ts - lastTS) / 1000;
+  lastTS = ts;
+  currentT = (ts - decayStart) / 1000;
+  globalPhase += dt * 4.0;
+
+  draw(currentT);
+
+  // Продолжаем пока не затихнет
+  let amplitude = Math.exp(-currentT * 1.1);
+  if (amplitude > 0.005) {
+    animId = requestAnimationFrame(step);
+  } else {
+    modes = [];
+    currentT = 0;
+    draw(0);
+    animId = null;
+  }
+}
+
+// ─── Звук
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playDrum(m, hitX, hitY) {
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+
+  // Базовая частота первой моды (m)
+  const mu0 = zeros[m][0];
+  const basePitch = 80 + m * 30; // Гц, чем выше m, тем выше звук
+
+  // Воспроизводим первые 3 радиальных моды с реальными соотношениями частот (нули Бесселя)
+  for (let n = 0; n < N_RADIAL; n++) {
+    let mu = zeros[m][n];
+    let freq = basePitch * (mu / mu0);
+    let gainVal = 0.3 / Math.pow(2.2, n);
+    let decayTime = 1.8 / (1 + n * 0.5 + m * 0.1);
+
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gainNode.gain.setValueAtTime(gainVal, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + decayTime);
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + decayTime + 0.05);
+    activeNodes.push({osc, gain: gainNode});
+  }
+
+  // Короткий ударный шум (transient)
+  {
+    const dur = 0.04;
+    const buf = audioCtx.createBuffer(1, Math.ceil(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.25, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(g); g.connect(audioCtx.destination);
+    src.start(now);
+  }
+}
+
+// ─── Отрисовка
+function draw(t) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawTopView(t);
+  drawSideView(t);
+
+
+}
+
+function drawTopView(t) {
+  // Плавная отрисовка через ImageData
+  const diameter = Math.ceil(topR * 2);
+  const imgData = ctx.createImageData(diameter, diameter);
+  const ox = Math.round(topCX - topR);
+  const oy = Math.round(topCY - topR);
+
+  for (let py = 0; py < diameter; py++) {
+    for (let px = 0; px < diameter; px++) {
+      let dx = px - topR, dy = py - topR;
+      let r = Math.sqrt(dx*dx + dy*dy) / topR;
+      if (r > 1) continue;
+      let theta = Math.atan2(dy, dx);
+      let v = waveAt(r, theta, t);
+      let norm = Math.max(-1, Math.min(1, v));
+      let rr, gg, bb;
+      if (norm >= 0) {
+        rr = Math.round(80 + 100*norm);
+        gg = Math.round(160 + 95*norm);
+        bb = Math.round(80 + 100*norm);
+      } else {
+        let s = -norm;
+        rr = Math.round(80 - 70*s);
+        gg = Math.round(160 - 110*s);
+        bb = Math.round(80 - 70*s);
+      }
+      let idx = (py * diameter + px) * 4;
+      imgData.data[idx]   = rr;
+      imgData.data[idx+1] = gg;
+      imgData.data[idx+2] = bb;
+      imgData.data[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, ox, oy);
+
+  // Граница — красная
+  ctx.beginPath();
+  ctx.arc(topCX, topCY, topR, 0, Math.PI*2);
+  ctx.strokeStyle = '#e53935';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Зажатые точки
+  for (let p of pinned) {
+    let px = topCX + topR * 0.72 * Math.cos(p.angle);
+    let py = topCY + topR * 0.72 * Math.sin(p.angle);
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI*2);
+    ctx.fillStyle = '#e53935';
+    ctx.fill();
+  }
+}
+
+function drawSideView(t) {
+  const SX = sideSX, SY = sideSY, SW = sideW, SH = sideH;
+
+  // Ось
+  ctx.setLineDash([4, 6]);
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(SX, SY + SH/2);
+  ctx.lineTo(SX + SW, SY + SH/2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Граница (края мембраны) — красная
+  ctx.strokeStyle = '#e53935';
+  ctx.lineWidth = 3;
+  // Левый столбик
+  ctx.beginPath(); ctx.moveTo(SX, SY); ctx.lineTo(SX, SY+SH); ctx.stroke();
+  // Правый столбик
+  ctx.beginPath(); ctx.moveTo(SX+SW, SY); ctx.lineTo(SX+SW, SY+SH); ctx.stroke();
+
+  // Профиль волны вдоль диаметра
+  ctx.beginPath();
+  const steps = 300;
+  let firstPt = true;
+  for (let i = 0; i <= steps; i++) {
+    let frac = i / steps; // 0→1 слева направо
+    let r = Math.abs(frac * 2 - 1); // 1→0→1
+    let theta = frac < 0.5 ? Math.PI : 0;
+    let v = waveAt(r, theta, t);
+    let px = SX + frac * SW;
+    let py = SY + SH/2 - v * SH * 0.42;
+    if (firstPt) { ctx.moveTo(px, py); firstPt = false; }
+    else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = '#4caf50';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+
+}
+
+// ─── Взаимодействие
+canvas.addEventListener('click', (e) => {
+  const mx = e.clientX - topCX;
+  const my = e.clientY - topCY;
+  const r = Math.sqrt(mx*mx + my*my);
+
+  if (r <= topR) {
+    if (r < topR * 0.65) {
+      // Удар по мембране
+      startVibration(e.clientX, e.clientY);
+    } else {
+      // Зажать/убрать точку на краю
+      const angle = Math.atan2(my, mx);
+      const threshold = 0.35;
+      let idx = pinned.findIndex(p =>
+        Math.abs(p.angle - angle) < threshold ||
+        Math.abs(p.angle - angle + 2*Math.PI) < threshold ||
+        Math.abs(p.angle - angle - 2*Math.PI) < threshold
+      );
+      if (idx >= 0) {
+        pinned.splice(idx, 1);
+      } else if (pinned.length < 6) {
+        pinned.push({ angle });
+      }
+      if (!animId) draw(0);
+    }
+  }
+});
+
+// Touch
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  canvas.dispatchEvent(new MouseEvent('click', { clientX: t.clientX, clientY: t.clientY }));
+}, { passive: false });
+
+// ─── Начальная отрисовка
+draw(0);
+</script>
+</body>
+</html>
