@@ -220,26 +220,28 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     var r = cv.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
     
-    // 1. Задаем реальное физическое разрешение буфера (высокое качество)
-    cv.width = Math.round(r.width * dpr);
-    cv.height = Math.round(r.height * dpr);
+    // Вычисляем нужные физические пиксели
+    var nextW = Math.round(r.width * dpr);
+    var nextH = Math.round(r.height * dpr);
     
-    // 2. Масштабируем контекст, чтобы рисовать в логических координатах
-    ctx.scale(dpr, dpr);
+    // Обновляем буфер canvas ТОЛЬКО если реальный размер изменился.
+    // Это полностью разорвёт бесконечный цикл и предотвратит зависание!
+    if (cv.width !== nextW || cv.height !== nextH) {
+      cv.width = nextW;
+      cv.height = nextH;
+    }
     
-    // 3. Вызываем вашу функцию отрисовки
     draw();
   }
+
   function draw(){
     var r = cv.getBoundingClientRect();
-      var dpr = window.devicePixelRatio || 1;
-      
-      // Вместо деления cv.width / r.width жестко задаем dpr экрана.
-      // Это гарантирует идеальное аппаратное ускорение пиксель-в-пиксель.
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      
-      // Отрисовываем сцену, передавая чистые логические размеры экрана
-      renderScene(ctx, r.width, r.height, st, theme());
+    var dpr = window.devicePixelRatio || 1;
+    
+    // Задаем чистую матрицу трансформации без побочных эффектов деления
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    renderScene(ctx, r.width, r.height, st, theme());
   }
 
   function setView(yaw, pitch){ st.yaw = yaw; st.pitch = pitch; draw(); }
@@ -300,7 +302,7 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     st.yaw += 0.006; draw(); requestAnimationFrame(tick);
   }
 
-  if (dark && dark.addEventListener) dark.addEventListener("change", draw);
+  if (dark && dark.addEventListener) dark.addEventListener("change", resize);
   window.addEventListener("resize", resize);
   resize();
 })();
