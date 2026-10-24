@@ -241,7 +241,7 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     // Задаем чистую матрицу трансформации без побочных эффектов деления
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     
-    renderScene(ctx, r.width, r.height, st, theme());
+    renderScene(ctx, r.width / dpr, r.height / dpr, st, theme());
   }
 
   function setView(yaw, pitch){ st.yaw = yaw; st.pitch = pitch; draw(); }
