@@ -20,7 +20,7 @@ h2{font-size:1.05rem;margin:26px 0 8px}
 p{margin:6px 0}
 .sub{color:var(--mute);margin:0 0 14px}
 #wrap{background:var(--card);overflow:hidden}
-canvas{display:block;width:100%; height: 100%;touch-action:none;cursor:grab}
+canvas{display:block;width:100%; aspect-ratio: 4/3; touch-action:none;cursor:grab}
 canvas.drag{cursor:grabbing}
 .row{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0;align-items:center}
 label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -221,7 +221,6 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     var dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(r.width * dpr);
     cv.height = Math.round(r.height * dpr);
-    ctx.scale(dpr, dpr)
     draw();
   }
   function draw(){
