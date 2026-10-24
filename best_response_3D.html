@@ -221,6 +221,7 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     var dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(r.width * dpr);
     cv.height = Math.round(r.height * dpr);
+    ctx.scale(dpr, dpr)
     draw();
   }
   function draw(){
