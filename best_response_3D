@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BR₁ и BR₂ в 3D: игра 2×3</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --mute:#5b6572; --card:#f4f6f8; --line:#d7dce2;
+  --g:#1f8a4c; --r:#d6336c;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#14171b; --fg:#e8ebef; --mute:#9aa4b0; --card:#1d2127; --line:#2f353d; --g:#47c27e; --r:#ff6b9a; }
+}
+html,body{margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.35rem;margin:0 0 4px}
+h2{font-size:1.05rem;margin:26px 0 8px}
+p{margin:6px 0}
+.sub{color:var(--mute);margin:0 0 14px}
+#wrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+canvas{display:block;width:100%;aspect-ratio:4/3;touch-action:none;cursor:grab}
+canvas.drag{cursor:grabbing}
+.row{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0;align-items:center}
+label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+button{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);
+  background:var(--card);color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--mute)}
+button.on{border-color:var(--g);color:var(--g)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+ul{margin:6px 0 6px 1.2em;padding:0}
+li{margin:4px 0}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+</style>
+</head>
+<body>
+<main>
+<h1>BR₁ и BR₂ в 3D: игра 2×3</h1>
+<p class="sub">Игрок 1: T (вероятность x) или B. Игрок 2: L (y), C (z) или R (1−y−z). Крутите мышью или пальцем, колёсиком масштаб. Подписи у жёлтых точек это (x, y, z).</p>
+
+<div id="wrap"><canvas id="cv"></canvas></div>
+
+<div class="row">
+  <label class="chk"><input type="checkbox" id="cBR1" checked><span class="sw" style="background:var(--g)"></span>BR₁(y,z)</label>
+  <label class="chk"><input type="checkbox" id="cBR2" checked><span class="sw" style="background:var(--r)"></span>BR₂(x)</label>
+  <label class="chk"><input type="checkbox" id="cNE" checked>равновесия</label>
+  <label class="chk"><input type="checkbox" id="cFrame" checked>каркас</label>
+  <label class="chk"><input type="checkbox" id="cLabels">подписи на зелёном</label>
+</div>
+
+<div class="row">
+  <button id="bReset">Сбросить вид</button>
+  <button id="bYZ">Вдоль x: треугольник (y, z)</button>
+  <button id="bXZ">Сбоку (x, z)</button>
+  <button id="bTop">Сверху (x, y)</button>
+  <button id="bSpin">Автовращение</button>
+</div>
+
+<h2>Как читать картинку</h2>
+<ul>
+  <li><b style="color:var(--g)">Зелёное</b>: BR₁(y,z), что выбирает игрок 1. Плоскость <span class="mono">x = 1</span> там, где ему лучше T (справа от линии <span class="mono">y = (1+z)/5</span>), плоскость <span class="mono">x = 0</span> там, где лучше B, и вертикальная стенка на самой линии, где он безразличен и подходит любой x от 0 до 1.</li>
+  <li><b style="color:var(--r)">Красное</b>: BR₂(x), что выбирает игрок 2. Это «лесенка»: для каждого x одна точка или один отрезок в плоскости (y, z). Горизонтальные участки вдоль оси x это чистые ответы, а «ступеньки» при <span class="mono">x = 1/2</span> и <span class="mono">x = 3/4</span> это места, где игрок 2 безразличен.</li>
+  <li><b>Равновесие Нэша</b> это точка, где красное пересекает зелёное (желтые точки): <span class="mono">(0, 0, 1)</span> то есть (B, C), <span class="mono">(1, 1, 0)</span> то есть (T, L) и смешанное <span class="mono">(3/4, 1/5, 0)</span>, где ступенька красной лесенки при <span class="mono">x = 3/4</span> пробивает зелёную стенку.</li>
+</ul>
+</main>
+
+<script>
+"use strict";
+// ================= core: geometry and rendering (no DOM) =================
+var EPS = 1e-9;
+
+function gcd(a, b){ return b ? gcd(b, a % b) : a; }
+function frac(v){
+  for (var d = 1; d <= 12; d++){
+    var n = Math.round(v * d);
+    if (Math.abs(v - n / d) < 1e-6){
+      var g = gcd(Math.abs(n), d) || 1;
+      var nn = n / g, dd = d / g;
+      return dd === 1 ? String(nn) : nn + "/" + dd;
+    }
+  }
+  return v.toFixed(3);
+}
+
+var THEMES = {
+  light: {bg:"#f4f6f8", fg:"#1b1f24", mute:"#5b6572", frame:"rgba(90,100,115,0.55)", axis:"#38414c",
+          gFill:"rgba(46,160,90,0.26)", gEdge:"rgba(31,138,76,0.9)", gDark:"#0f5f31",
+          r:"#d6336c", planeFill:"rgba(70,110,190,0.12)", planeEdge:"rgba(70,110,190,0.75)",
+          halo:"#f4f6f8", ne:"#ffcc00", neEdge:"#1b1f24"},
+  dark:  {bg:"#1d2127", fg:"#e8ebef", mute:"#9aa4b0", frame:"rgba(160,170,185,0.5)", axis:"#c3cad3",
+          gFill:"rgba(71,194,126,0.24)", gEdge:"rgba(71,194,126,0.95)", gDark:"#7be0a8",
+          r:"#ff6b9a", planeFill:"rgba(120,160,240,0.14)", planeEdge:"rgba(140,175,245,0.8)",
+          halo:"#1d2127", ne:"#ffcc00", neEdge:"#ffffff"}
+};
+
+var DEFAULTS = {yaw: 0.5, pitch: 0.35, zoom: 1.1,
+                show: {br1:true, br2:true, ne:true, frame:true, labels:false}};
+
+function lerp3(a, b, s){ return [a[0]+(b[0]-a[0])*s, a[1]+(b[1]-a[1])*s, a[2]+(b[2]-a[2])*s]; }
+
+function renderScene(ctx, W, H, st, th){
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = th.bg; ctx.fillRect(0, 0, W, H);
+
+  var cyw = Math.cos(st.yaw), syw = Math.sin(st.yaw);
+  var cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
+  var S = H * 0.50 * st.zoom;
+  function pr(p){
+    var X = p[0] - 0.5, Y = p[1] - 0.45, Z = p[2] - 0.40;
+    var x1 = X * cyw - Y * syw, y1 = X * syw + Y * cyw;
+    return [W / 2 + x1 * S, H / 2 - (Z * cp + y1 * sp) * S, y1 * cp - Z * sp];
+  }
+  function seg(a, b, col, lw, dash){
+    var p = pr(a), q = pr(b);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash(dash || []); ctx.lineCap = "butt";
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  function text(str, p, dx, dy, size, col, align){
+    var q = pr(p);
+    ctx.font = (size || 13) + "px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle";
+    ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = th.halo;
+    ctx.strokeText(str, q[0] + dx, q[1] + dy);
+    ctx.fillStyle = col || th.fg;
+    ctx.fillText(str, q[0] + dx, q[1] + dy);
+  }
+  function arrow(a, b, col){
+    seg(a, b, col, 1.6);
+    var p = pr(a), q = pr(b);
+    var ang = Math.atan2(q[1] - p[1], q[0] - p[0]);
+    ctx.beginPath();
+    ctx.moveTo(q[0], q[1]);
+    ctx.lineTo(q[0] - 9 * Math.cos(ang - 0.35), q[1] - 9 * Math.sin(ang - 0.35));
+    ctx.lineTo(q[0] - 9 * Math.cos(ang + 0.35), q[1] - 9 * Math.sin(ang + 0.35));
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+
+  // ---- background: frame of the domain (a triangular prism) ----
+  if (st.show.frame){
+    var O = [0,0,0], Yp = [0,1,0], Zp = [0,0,1];
+    var O1 = [1,0,0], Y1 = [1,1,0], Z1 = [1,0,1];
+    [[O,Yp],[Yp,Zp],[Zp,O],[O1,Y1],[Y1,Z1],[Z1,O1],[Yp,Y1],[Zp,Z1]].forEach(function(e){
+      seg(e[0], e[1], th.frame, 1, [4, 4]);
+    });
+  }
+  // ---- axes ----
+  arrow([0,0,0], [1.22,0,0], th.axis);
+  arrow([0,0,0], [0,1.2,0], th.axis);
+  arrow([0,0,0], [0,0,1.2], th.axis);
+
+  // ---- depth-sorted items ----
+  var items = [];
+  function addPoly(pts, fill, stroke, lw){
+    var q = pts.map(pr);
+    var d = q.reduce(function(s, a){ return s + a[2]; }, 0) / q.length;
+    items.push({d: d, f: function(){
+      ctx.beginPath();
+      q.forEach(function(a, i){ if (i) ctx.lineTo(a[0], a[1]); else ctx.moveTo(a[0], a[1]); });
+      ctx.closePath();
+      if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.setLineDash([]); ctx.stroke(); }
+    }});
+  }
+  function addLine(a, b, col, lw, n){
+    n = n || 14;
+    for (var i = 0; i < n; i++){
+      (function(i){
+        var p = pr(lerp3(a, b, i / n)), q = pr(lerp3(a, b, (i + 1) / n));
+        items.push({d: (p[2] + q[2]) / 2 - 0.05, f: function(){
+          ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]);
+          ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.setLineDash([]);
+          ctx.stroke();
+        }});
+      })(i);
+    }
+  }
+
+  var A = [[1,0.2,0],[1,1,0],[1,1/3,2/3]];                 // x = 1: T is better
+  var B = [[0,0,0],[0,0.2,0],[0,1/3,2/3],[0,0,1]];         // x = 0: B is better
+  var Wl = [[0,0.2,0],[1,0.2,0],[1,1/3,2/3],[0,1/3,2/3]];  // wall: y = (1+z)/5, any x
+  var path = [[0,0,1],[0.5,0,1],[0.5,0,0],[0.75,0,0],[0.75,1,0],[1,1,0]];
+
+  if (st.show.br1){
+    addPoly(A, th.gFill, th.gEdge, 1.5);
+    addPoly(B, th.gFill, th.gEdge, 1.5);
+    addPoly(Wl, th.gFill, th.gEdge, 1.5);
+  }
+  if (st.show.br2){
+    for (var k = 0; k + 1 < path.length; k++) addLine(path[k], path[k+1], th.r, 4.5);
+  }
+  items.sort(function(a, b){ return b.d - a.d; });   // far first
+  items.forEach(function(it){ it.f(); });
+
+  // ---- top pass: equilibria and labels ----
+  if (st.show.br1 && st.show.labels){
+    text("x = 1 (T)", [1,0.52,0.22], 0, 0, 12, th.gDark);
+    text("x = 0 (B)", [0,0.13,0.42], 0, 0, 12, th.gDark);
+    text("y = (1+z)/5: любой x", [0.5,0.27,0.34], 0, 0, 12, th.gDark);
+  }
+
+  if (st.show.ne){
+    [[[0,0,1],      "(0, 0, 1)",       "(B, C)",        -14, -34, "right"],
+     [[1,1,0],      "(1, 1, 0)",       "(T, L)",         18,  10, "left"],
+     [[0.75,0.2,0], "(3/4, 1/5, 0)",   "смешанное",      16, -24, "left"]].forEach(function(e){
+      var q = pr(e[0]);
+      ctx.beginPath(); ctx.arc(q[0], q[1], 7, 0, 6.2832);
+      ctx.fillStyle = th.ne; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = th.neEdge; ctx.stroke();
+      text(e[1], e[0], e[3], e[4], 14, th.fg, e[5]);
+      text(e[2], e[0], e[3], e[4] + 16, 12, th.mute, e[5]);
+    });
+  }
+
+  // axis names and ticks
+  var ox = pr([0,0,0]), px1 = pr([1,0,0]);
+  var xLen = Math.hypot(px1[0] - ox[0], px1[1] - ox[1]);
+  if (xLen > 40){
+    [[0.5,"1/2"],[0.75,"3/4"],[1,"1"]].forEach(function(v){ text(v[1], [v[0],0,0], 0, 14, 11, th.mute); });
+  }
+  text("x = P(T)", [1.3,0,0], (xLen > 40 ? 0 : -58), (xLen > 40 ? 0 : 18), 14, th.fg);
+  text("y = P(L)", [0,1.28,0], 0, 0, 14, th.fg);
+  text("z = P(C)", [0,0,1.28], 0, 0, 14, th.fg);
+  [[0.2,"1/5"],[1,"1"]].forEach(function(v){ text(v[1], [0,v[0],0], -14, 6, 11, th.mute); });
+  [[2/3,"2/3"],[1,"1"]].forEach(function(v){ text(v[1], [0,0,v[0]], -16, 0, 11, th.mute); });
+
+  ctx.restore();
+}
+
+if (typeof module !== "undefined") module.exports = {renderScene: renderScene, THEMES: THEMES, DEFAULTS: DEFAULTS};
+
+// ================= DOM glue =================
+(function(){
+  if (typeof document === "undefined") return;
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d");
+  var st = JSON.parse(JSON.stringify(DEFAULTS));
+  var spin = false;
+  var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+
+  function theme(){ return dark && dark.matches ? THEMES.dark : THEMES.light; }
+
+  function resize(){
+    var r = cv.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
+    draw();
+  }
+  function draw(){
+    var r = cv.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(cv.width / r.width, 0, 0, cv.height / r.height, 0, 0);
+    renderScene(ctx, r.width, r.height, st, theme());
+  }
+
+  function setView(yaw, pitch){ st.yaw = yaw; st.pitch = pitch; draw(); }
+
+  // drag to rotate, wheel / pinch to zoom
+  var ptrs = {}, lastDist = 0;
+  cv.addEventListener("pointerdown", function(e){
+    cv.setPointerCapture(e.pointerId);
+    ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+    cv.classList.add("drag");
+    var ids = Object.keys(ptrs);
+    if (ids.length === 2){
+      var a = ptrs[ids[0]], b = ptrs[ids[1]];
+      lastDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+  cv.addEventListener("pointermove", function(e){
+    if (!ptrs[e.pointerId]) return;
+    var p = ptrs[e.pointerId];
+    var dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    var ids = Object.keys(ptrs);
+    if (ids.length === 1){
+      st.yaw += dx * 0.008;
+      st.pitch = Math.max(-0.1, Math.min(1.5708, st.pitch + dy * 0.008));
+    } else if (ids.length === 2){
+      var a = ptrs[ids[0]], b = ptrs[ids[1]];
+      var d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastDist > 0) st.zoom = Math.max(0.5, Math.min(3, st.zoom * d / lastDist));
+      lastDist = d;
+    }
+    draw();
+  });
+  function up(e){ delete ptrs[e.pointerId]; lastDist = 0; if (!Object.keys(ptrs).length) cv.classList.remove("drag"); }
+  cv.addEventListener("pointerup", up);
+  cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", function(e){
+    e.preventDefault();
+    st.zoom = Math.max(0.5, Math.min(3, st.zoom * Math.exp(-e.deltaY * 0.0012)));
+    draw();
+  }, {passive: false});
+
+  // controls
+  [["cBR1","br1"],["cBR2","br2"],["cNE","ne"],["cFrame","frame"],["cLabels","labels"]].forEach(function(p){
+    document.getElementById(p[0]).addEventListener("change", function(e){ st.show[p[1]] = e.target.checked; draw(); });
+  });
+  document.getElementById("bReset").addEventListener("click", function(){ st.yaw = DEFAULTS.yaw; st.pitch = DEFAULTS.pitch; st.zoom = DEFAULTS.zoom; draw(); });
+  document.getElementById("bYZ").addEventListener("click", function(){ setView(-Math.PI / 2, 0); });
+  document.getElementById("bXZ").addEventListener("click", function(){ setView(0, 0); });
+  document.getElementById("bTop").addEventListener("click", function(){ setView(0, Math.PI / 2); });
+  var bSpin = document.getElementById("bSpin");
+  bSpin.addEventListener("click", function(){
+    spin = !spin; bSpin.classList.toggle("on", spin);
+    if (spin) requestAnimationFrame(tick);
+  });
+  function tick(){
+    if (!spin) return;
+    st.yaw += 0.006; draw(); requestAnimationFrame(tick);
+  }
+
+  if (dark && dark.addEventListener) dark.addEventListener("change", draw);
+  window.addEventListener("resize", resize);
+  resize();
+})();
+</script>
+</body>
+</html>
