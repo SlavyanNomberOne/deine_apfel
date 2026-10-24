@@ -6,21 +6,21 @@
 <title>BR₁ и BR₂ в 3D</title>
 <style>
 :root{
-  --bg:#ffffff; --fg:#1b1f24; --mute:#5b6572; --card:#ffffff; --line:#d7dce2;
+  --bg:#ffffff; --fg:#1b1f24; --mute:#5b6572; --card:#f4f6f8; --line:#d7dce2;
   --g:#1f8a4c; --r:#d6336c;
 }
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#ffffff; --fg:#e8ebef; --mute:#9aa4b0; --card:#ffffff; --line:#2f353d; --g:#47c27e; --r:#ff6b9a; }
+  :root{ --bg:#14171b; --fg:#e8ebef; --mute:#9aa4b0; --card:#1d2127; --line:#2f353d; --g:#47c27e; --r:#ff6b9a; }
 }
 html,body{margin:0;background:var(--bg);color:var(--fg);
   font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:100%;margin:0 auto;padding:0px 0px 0px}
+main{max-width:980px;margin:0 auto;padding:20px 16px 48px}
 h1{font-size:1.35rem;margin:0 0 4px}
 h2{font-size:1.05rem;margin:26px 0 8px}
 p{margin:6px 0}
 .sub{color:var(--mute);margin:0 0 14px}
-#wrap{background:var(--card);overflow:hidden;aspect-ratio:4/3}
-canvas{display:block;width:100% !important;height:100% !important;touch-action:none;cursor:grab}
+#wrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+canvas{display:block;width:100%;aspect-ratio:4/3;touch-action:none;cursor:grab}
 canvas.drag{cursor:grabbing}
 .row{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0;align-items:center}
 label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -39,7 +39,7 @@ li{margin:4px 0}
 <main>
 <div id="wrap"><canvas id="cv"></canvas></div>
 </main>
-  
+
 <script>
 "use strict";
 // ================= core: geometry and rendering (no DOM) =================
@@ -81,8 +81,7 @@ function renderScene(ctx, W, H, st, th){
 
   var cyw = Math.cos(st.yaw), syw = Math.sin(st.yaw);
   var cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
-  var dpr = window.devicePixelRatio || 1;
-  var S = (H / dpr) * 0.50 * st.zoom;
+  var S = H * 0.50 * st.zoom;
   function pr(p){
     var X = p[0] - 0.5, Y = p[1] - 0.45, Z = p[2] - 0.40;
     var x1 = X * cyw - Y * syw, y1 = X * syw + Y * cyw;
@@ -220,28 +219,14 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
   function resize(){
     var r = cv.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
-    
-    // Вычисляем нужные физические пиксели
-    var nextW = Math.round(r.width * dpr);
-    var nextH = Math.round(r.height * dpr);
-    
-    // Обновляем буфер canvas ТОЛЬКО если реальный размер изменился.
-    // Это полностью разорвёт бесконечный цикл и предотвратит зависание!
-    if (cv.width !== nextW || cv.height !== nextH) {
-      cv.width = nextW;
-      cv.height = nextH;
-    }
-    
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
     draw();
   }
-
   function draw(){
     var r = cv.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
-    
-    // Задаем чистую матрицу трансформации без побочных эффектов деления
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
+    ctx.setTransform(cv.width / r.width, 0, 0, cv.height / r.height, 0, 0);
     renderScene(ctx, r.width, r.height, st, theme());
   }
 
@@ -303,9 +288,9 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     st.yaw += 0.006; draw(); requestAnimationFrame(tick);
   }
 
-  if (dark && dark.addEventListener) dark.addEventListener("change", resize);
+  if (dark && dark.addEventListener) dark.addEventListener("change", draw);
   window.addEventListener("resize", resize);
-  requestAnimationFrame(resize);
+  resize();
 })();
 </script>
 </body>
