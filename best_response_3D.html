@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BR₁ и BR₂ в 3D</title>
+<title>BR₁ и BR₂ в 3D: игра 2×3</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#1b1f24; --mute:#5b6572; --card:#f4f6f8; --line:#d7dce2;
@@ -35,9 +35,34 @@ li{margin:4px 0}
 </style>
 </head>
 <body>
-  
 <main>
+<h1>BR₁ и BR₂ в 3D: игра 2×3</h1>
+<p class="sub">Игрок 1: T (вероятность x) или B. Игрок 2: L (y), C (z) или R (1−y−z). Крутите мышью или пальцем, колёсиком масштаб. Подписи у жёлтых точек это (x, y, z).</p>
+
 <div id="wrap"><canvas id="cv"></canvas></div>
+
+<div class="row">
+  <label class="chk"><input type="checkbox" id="cBR1" checked><span class="sw" style="background:var(--g)"></span>BR₁(y,z)</label>
+  <label class="chk"><input type="checkbox" id="cBR2" checked><span class="sw" style="background:var(--r)"></span>BR₂(x)</label>
+  <label class="chk"><input type="checkbox" id="cNE" checked>равновесия</label>
+  <label class="chk"><input type="checkbox" id="cFrame" checked>каркас</label>
+  <label class="chk"><input type="checkbox" id="cLabels">подписи на зелёном</label>
+</div>
+
+<div class="row">
+  <button id="bReset">Сбросить вид</button>
+  <button id="bYZ">Вдоль x: треугольник (y, z)</button>
+  <button id="bXZ">Сбоку (x, z)</button>
+  <button id="bTop">Сверху (x, y)</button>
+  <button id="bSpin">Автовращение</button>
+</div>
+
+<h2>Как читать картинку</h2>
+<ul>
+  <li><b style="color:var(--g)">Зелёное</b>: BR₁(y,z), что выбирает игрок 1. Плоскость <span class="mono">x = 1</span> там, где ему лучше T (справа от линии <span class="mono">y = (1+z)/5</span>), плоскость <span class="mono">x = 0</span> там, где лучше B, и вертикальная стенка на самой линии, где он безразличен и подходит любой x от 0 до 1.</li>
+  <li><b style="color:var(--r)">Красное</b>: BR₂(x), что выбирает игрок 2. Это «лесенка»: для каждого x одна точка или один отрезок в плоскости (y, z). Горизонтальные участки вдоль оси x это чистые ответы, а «ступеньки» при <span class="mono">x = 1/2</span> и <span class="mono">x = 3/4</span> это места, где игрок 2 безразличен.</li>
+  <li><b>Равновесие Нэша</b> это точка, где красное пересекает зелёное (желтые точки): <span class="mono">(0, 0, 1)</span> то есть (B, C), <span class="mono">(1, 1, 0)</span> то есть (T, L) и смешанное <span class="mono">(3/4, 1/5, 0)</span>, где ступенька красной лесенки при <span class="mono">x = 3/4</span> пробивает зелёную стенку.</li>
+</ul>
 </main>
 
 <script>
