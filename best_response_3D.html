@@ -81,7 +81,8 @@ function renderScene(ctx, W, H, st, th){
 
   var cyw = Math.cos(st.yaw), syw = Math.sin(st.yaw);
   var cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
-  var S = H * 0.50 * st.zoom;
+  var dpr = window.devicePixelRatio || 1;
+  var S = (H / dpr) * 0.50 * st.zoom;
   function pr(p){
     var X = p[0] - 0.5, Y = p[1] - 0.45, Z = p[2] - 0.40;
     var x1 = X * cyw - Y * syw, y1 = X * syw + Y * cyw;
@@ -241,7 +242,7 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
     // Задаем чистую матрицу трансформации без побочных эффектов деления
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     
-    renderScene(ctx, r.width / dpr, r.height / dpr, st, theme());
+    renderScene(ctx, r.width, r.height, st, theme());
   }
 
   function setView(yaw, pitch){ st.yaw = yaw; st.pitch = pitch; draw(); }
@@ -304,7 +305,7 @@ if (typeof module !== "undefined") module.exports = {renderScene: renderScene, T
 
   if (dark && dark.addEventListener) dark.addEventListener("change", resize);
   window.addEventListener("resize", resize);
-  resize();
+  requestAnimationFrame(resize);
 })();
 </script>
 </body>
