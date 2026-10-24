@@ -62,14 +62,14 @@ var THEMES = {
   light: {bg:"#ffffff", fg:"#1b1f24", mute:"#5b6572", frame:"rgba(90,100,115,0.55)", axis:"#38414c",
           gFill:"rgba(46,160,90,0.26)", gEdge:"rgba(31,138,76,0.9)", gDark:"#0f5f31",
           r:"#d6336c", planeFill:"rgba(70,110,190,0.12)", planeEdge:"rgba(70,110,190,0.75)",
-          halo:"#f4f6f8", ne:"#ffcc00", neEdge:"#1b1f24"},
+          halo:"#ffffff", ne:"#ffcc00", neEdge:"#1b1f24"},
   dark:  {bg:"#111111", fg:"#e8ebef", mute:"#9aa4b0", frame:"rgba(160,170,185,0.5)", axis:"#c3cad3",
           gFill:"rgba(71,194,126,0.24)", gEdge:"rgba(71,194,126,0.95)", gDark:"#7be0a8",
           r:"#ff6b9a", planeFill:"rgba(120,160,240,0.14)", planeEdge:"rgba(140,175,245,0.8)",
-          halo:"#1d2127", ne:"#ffcc00", neEdge:"#ffffff"}
+          halo:"#111111", ne:"#ffcc00", neEdge:"#ffffff"}
 };
 
-var DEFAULTS = {yaw: 0.5, pitch: 0.35, zoom: 1.1,
+var DEFAULTS = {yaw: 2.5, pitch: 0.35, zoom: 1.1,
                 show: {br1:true, br2:true, ne:true, frame:false, labels:false}};
 
 function lerp3(a, b, s){ return [a[0]+(b[0]-a[0])*s, a[1]+(b[1]-a[1])*s, a[2]+(b[2]-a[2])*s]; }
